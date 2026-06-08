@@ -1,11 +1,11 @@
 """
-Gender Detection API Server (InsightFace).
+Gender Detection API Server (DeepFace + RetinaFace).
 
 Setup:
-    pip install fastapi uvicorn[standard] insightface onnxruntime opencv-python-headless
+    pip install fastapi uvicorn[standard] deepface tf-keras opencv-python-headless
 
 Run:
-    python server.py
+    python detect.py
 
 API:
     GET /api/detect?path=<image_path>
@@ -14,13 +14,11 @@ API:
 
 import os
 import time
-import cv2
-import numpy as np
 from fastapi import FastAPI, Query
 from starlette.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 import uvicorn
-from insightface.app import FaceAnalysis
+from deepface import DeepFace
 
 app = FastAPI()
 app.add_middleware(
@@ -30,48 +28,43 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Load InsightFace model once at startup.
-# buffalo_l = best accuracy/speed balance (ArcFace + detection + gender/age).
-face_app = FaceAnalysis(name="buffalo_l", providers=["CPUExecutionProvider"])
-face_app.prepare(ctx_id=-1, det_size=(640, 640))
-
 
 def detect_gender(img_path: str) -> list[dict]:
     """Detect gender for every face in an image. Returns list of dicts."""
-    img = cv2.imread(img_path)
-    if img is None:
-        raise ValueError(f"Could not read image: {img_path}")
+    analyses = DeepFace.analyze(
+        img_path=img_path,
+        actions=["gender"],
+        detector_backend="retinaface",
+        enforce_detection=False,
+        silent=True,
+    )
 
-    faces = face_app.get(img)
-    if not faces:
+    if not analyses:
         return []
 
     # Keep only the largest face (closest person).
-    largest = max(faces, key=lambda f: (f.bbox[2] - f.bbox[0]) * (f.bbox[3] - f.bbox[1]))
+    largest = max(analyses, key=lambda a: a["region"]["w"] * a["region"]["h"])
 
-    results = []
-    for face in [largest]:
-        # InsightFace gender: 0 = Female, 1 = Male
-        gender_idx = face.gender  # int: 0 or 1
-        gender = "Man" if gender_idx == 1 else "Woman"
-        bbox = face.bbox.astype(int)
+    woman_pct = float(largest["gender"]["Woman"])
+    man_pct = float(largest["gender"]["Man"])
+    dominant = "Man" if man_pct >= woman_pct else "Woman"
+    confidence = round(max(woman_pct, man_pct) / 100.0, 4)
+    region = largest["region"]
 
-        results.append({
-            "gender": gender,
-            "confidence": round(float(face.det_score), 4),
-            "scores": {
-                "Woman": round(1.0 - gender_idx, 4),
-                "Man": round(float(gender_idx), 4),
-            },
-            "region": {
-                "x": int(bbox[0]),
-                "y": int(bbox[1]),
-                "w": int(bbox[2] - bbox[0]),
-                "h": int(bbox[3] - bbox[1]),
-            },
-        })
-
-    return results
+    return [{
+        "gender": dominant,
+        "confidence": confidence,
+        "scores": {
+            "Woman": round(woman_pct / 100.0, 4),
+            "Man": round(man_pct / 100.0, 4),
+        },
+        "region": {
+            "x": int(region["x"]),
+            "y": int(region["y"]),
+            "w": int(region["w"]),
+            "h": int(region["h"]),
+        },
+    }]
 
 
 @app.get("/api/health")

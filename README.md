@@ -1,33 +1,33 @@
 # Gender Detection API
 
-A two-tier API for detecting gender in images. A **Python (FastAPI)** backend performs face analysis using InsightFace, and a **Node.js (Express)** frontend proxies requests to it.
+A two-tier API for detecting gender in images. A **Python (FastAPI)** backend performs face analysis using DeepFace with the RetinaFace detector, and a **Node.js (Express)** frontend proxies requests to it.
 
 ## Architecture
 
 ```
-Client  ──▶  Node.js (:3000)  ──▶  Python (:5000)  ──▶  InsightFace model
+Client  ──▶  Node.js (:3000)  ──▶  Python (:5000)  ──▶  DeepFace (RetinaFace)
               /api/detect              /api/detect
               /api/health              /api/health
 ```
 
 ## Prerequisites
 
-| Tool       | Version           | Check               |
-| ---------- | ----------------- | -------------------- |
-| **Node.js** | 16 or later       | `node -v`            |
-| **npm**     | comes with Node   | `npm -v`             |
-| **Python**  | 3.9 - 3.12      | `python --version`   |
-| **pip**     | comes with Python | `pip --version`      |
+| Tool       | Version         | Check             |
+| ---------- | --------------- | ------------------|
+| **Node.js** | 16 or later    | `node -v`         |
+| **npm**     | comes with Node | `npm -v`          |
+| **Python**  | 3.9 – 3.12    | `python --version`|
+| **pip**     | comes with Python | `pip --version` |
 
 ## Setup
 
 ### 1. Python backend
 
 ```bash
-pip install fastapi "uvicorn[standard]" insightface onnxruntime opencv-python-headless
+pip install fastapi "uvicorn[standard]" deepface tf-keras opencv-python-headless
 ```
 
-> **Note:** On first run InsightFace will download the `buffalo_l` model (~300 MB). An internet connection is required for that initial download.
+> **Note:** On first run DeepFace will download the RetinaFace detector and gender classification model weights. An internet connection is required for that initial download.
 
 ### 2. Node.js frontend
 
@@ -42,7 +42,7 @@ Start both servers — **Python first**, then Node.
 ### Start the Python server
 
 ```bash
-python server.py
+python detect.py
 ```
 
 Runs on **http://localhost:5000** by default.
@@ -73,8 +73,8 @@ Example response:
   "faces": [
     {
       "gender": "Woman",
-      "confidence": 0.9412,
-      "scores": { "Woman": 1.0, "Man": 0.0 },
+      "confidence": 0.9613,
+      "scores": { "Woman": 0.9613, "Man": 0.0387 },
       "region": { "x": 120, "y": 80, "w": 200, "h": 250 }
     }
   ],
